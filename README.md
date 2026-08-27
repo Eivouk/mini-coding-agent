@@ -51,6 +51,21 @@ python -m mini_agent "创建一个 Python 计算器并为它编写单元测试�
 python -m unittest discover -s tests -v
 ```
 
+## 准备演示任务
+
+仓库提供了一个故意带错误的计算器模板。先复制它，避免演示过程修改模板：
+
+```powershell
+Copy-Item .\demo_template .\demo_workspace -Recurse
+python -m unittest discover -s .\demo_workspace -v
+```
+
+初始测试会失败。然后让 Agent 完成真实修复：
+
+```powershell
+python -m mini_agent "修复计算器的除法功能，使全部测试通过。不要修改测试文件，完成后运行测试验证。" --workspace .\demo_workspace
+```
+
 ## 核心设计
 
 `CodingAgent.run()` 是整个项目的核心。每一轮它都会：
@@ -62,4 +77,3 @@ python -m unittest discover -s tests -v
 5. 达到最大轮数时强制停止，避免无限循环。
 
 文件工具拒绝绝对路径和工作区外路径；命令有超时和输出长度限制，并拦截部分明显危险的命令。
-
