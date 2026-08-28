@@ -12,6 +12,14 @@ from .model_client import OpenAICompatibleChatModel
 from .tools import WorkspaceTools
 
 
+def _configure_console_encoding() -> None:
+    """Use UTF-8 for redirected Windows output as well as interactive terminals."""
+    for stream in (sys.stdout, sys.stderr):
+        reconfigure = getattr(stream, "reconfigure", None)
+        if callable(reconfigure):
+            reconfigure(encoding="utf-8", errors="replace")
+
+
 def _show_event(kind: str, message: str) -> None:
     labels = {
         "step": "AGENT",
@@ -39,6 +47,7 @@ def build_parser() -> argparse.ArgumentParser:
 
 
 def main(argv: list[str] | None = None) -> int:
+    _configure_console_encoding()
     args = build_parser().parse_args(argv)
     task = args.task or input("Task: ").strip()
 
@@ -67,4 +76,3 @@ def main(argv: list[str] | None = None) -> int:
 
 if __name__ == "__main__":
     raise SystemExit(main())
-
