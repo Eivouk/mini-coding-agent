@@ -82,6 +82,32 @@ TOOL_DEFINITIONS: list[dict[str, Any]] = [
     {
         "type": "function",
         "function": {
+            "name": "edit_file",
+            "description": (
+                "Replace one exact, uniquely occurring text block in an existing "
+                "UTF-8 file. Prefer this for small edits."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "path": {"type": "string", "description": "Relative file path."},
+                    "old_text": {
+                        "type": "string",
+                        "description": "Exact existing text that must occur once.",
+                    },
+                    "new_text": {
+                        "type": "string",
+                        "description": "Replacement text; may be empty to delete.",
+                    },
+                },
+                "required": ["path", "old_text", "new_text"],
+                "additionalProperties": False,
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
             "name": "run_command",
             "description": "Run a non-destructive shell command inside the workspace.",
             "parameters": {
@@ -128,13 +154,15 @@ class WorkspaceTools:
                 "list_files": self.list_files,
                 "read_file": self.read_file,
                 "write_file": self.write_file,
+                "edit_file": self.edit_file,
                 "run_command": self.run_command,
             }
             handler = handlers.get(name)
             if handler is None:
                 raise ValueError(f"Unknown tool: {name}")
             result = handler(**arguments)
-            payload = {"ok": True, "result": result}
+            ok = result["exit_code"] == 0 if name == "run_command" else True
+            payload = {"ok": ok, "result": result}
         except Exception as exc:  # Tool errors should be visible to the model.
             payload = {"ok": False, "error": f"{type(exc).__name__}: {exc}"}
         return json.dumps(payload, ensure_ascii=False)
@@ -195,7 +223,31 @@ class WorkspaceTools:
         relative = file_path.relative_to(self.root).as_posix()
         return f"Wrote {len(content)} characters to {relative}"
 
-    def run_command(self, command: str, timeout: int = 30) -> str:
+    def edit_file(self, path: str, old_text: str, new_text: str) -> str:
+        file_path = self._resolve(path)
+        if not file_path.is_file():
+            raise ValueError(f"Not a file: {path}")
+        if not old_text:
+            raise ValueError("old_text cannot be empty")
+        if old_text == new_text:
+            raise ValueError("old_text and new_text must be different")
+
+        try:
+            content = file_path.read_text(encoding="utf-8")
+        except UnicodeDecodeError as exc:
+            raise ValueError("Only UTF-8 text files are supported") from exc
+
+        occurrences = content.count(old_text)
+        if occurrences == 0:
+            raise ValueError("old_text was not found")
+        if occurrences > 1:
+            raise ValueError(f"old_text appears {occurrences} times; expected exactly once")
+
+        file_path.write_text(content.replace(old_text, new_text, 1), encoding="utf-8")
+        relative = file_path.relative_to(self.root).as_posix()
+        return f"Replaced one occurrence in {relative}"
+
+    def run_command(self, command: str, timeout: int = 30) -> dict[str, Any]:
         if not command.strip():
             raise ValueError("Command cannot be empty")
         if not 1 <= timeout <= 120:
@@ -221,14 +273,18 @@ class WorkspaceTools:
         except subprocess.TimeoutExpired as exc:
             raise TimeoutError(f"Command exceeded {timeout} seconds") from exc
 
-        output = (
-            f"exit_code: {completed.returncode}\n"
-            f"stdout:\n{completed.stdout}\n"
-            f"stderr:\n{completed.stderr}"
-        )
-        if len(output) > MAX_COMMAND_CHARS:
-            output = output[:MAX_COMMAND_CHARS] + "\n... command output truncated"
-        return output
+        stream_limit = MAX_COMMAND_CHARS // 2
+        return {
+            "exit_code": completed.returncode,
+            "stdout": self._truncate(completed.stdout, stream_limit),
+            "stderr": self._truncate(completed.stderr, stream_limit),
+        }
+
+    @staticmethod
+    def _truncate(text: str, limit: int) -> str:
+        if len(text) <= limit:
+            return text
+        return text[:limit] + "\n... output truncated"
 
     def _resolve(self, relative_path: str) -> Path:
         candidate_input = Path(relative_path)
@@ -241,4 +297,3 @@ class WorkspaceTools:
         except ValueError as exc:
             raise ValueError("Path escapes the workspace") from exc
         return candidate
-

@@ -11,12 +11,17 @@ from mini_agent.agent import CodingAgent
 from mini_agent.tools import WorkspaceTools
 
 
-def tool_call(call_id: str, name: str, arguments: dict[str, Any]) -> Any:
+def tool_call(
+    call_id: str,
+    name: str,
+    arguments: dict[str, Any] | str,
+) -> Any:
+    serialized = arguments if isinstance(arguments, str) else json.dumps(arguments)
     return SimpleNamespace(
         id=call_id,
         function=SimpleNamespace(
             name=name,
-            arguments=json.dumps(arguments),
+            arguments=serialized,
         ),
     )
 
@@ -74,6 +79,68 @@ class CodingAgentTests(unittest.TestCase):
         self.assertFalse(result.completed)
         self.assertEqual(result.steps, 2)
         self.assertIn("maximum", result.final_text)
+
+    def test_agent_returns_malformed_arguments_to_model(self) -> None:
+        class MalformedModel:
+            def __init__(self) -> None:
+                self.calls = 0
+                self.last_messages: list[dict[str, Any]] = []
+
+            def complete(
+                self,
+                messages: list[dict[str, Any]],
+                tools: list[dict[str, Any]],
+            ) -> Any:
+                self.calls += 1
+                self.last_messages = list(messages)
+                if self.calls == 1:
+                    return SimpleNamespace(
+                        content="",
+                        tool_calls=[tool_call("bad", "read_file", "{not-json")],
+                    )
+                return SimpleNamespace(content="Recovered from bad arguments.", tool_calls=None)
+
+        with tempfile.TemporaryDirectory(dir=Path.cwd()) as temp_dir:
+            model = MalformedModel()
+            result = CodingAgent(model, WorkspaceTools(temp_dir), max_steps=2).run("Read")
+
+        self.assertTrue(result.completed)
+        self.assertEqual(model.last_messages[-1]["role"], "tool")
+        self.assertIn("Invalid tool arguments", model.last_messages[-1]["content"])
+
+    def test_agent_executes_multiple_calls_from_one_model_message(self) -> None:
+        class MultipleCallsModel:
+            def __init__(self) -> None:
+                self.calls = 0
+                self.last_messages: list[dict[str, Any]] = []
+
+            def complete(
+                self,
+                messages: list[dict[str, Any]],
+                tools: list[dict[str, Any]],
+            ) -> Any:
+                self.calls += 1
+                self.last_messages = list(messages)
+                if self.calls == 1:
+                    return SimpleNamespace(
+                        content="Creating two files.",
+                        tool_calls=[
+                            tool_call("one", "write_file", {"path": "one.txt", "content": "1"}),
+                            tool_call("two", "write_file", {"path": "two.txt", "content": "2"}),
+                        ],
+                    )
+                return SimpleNamespace(content="Created both files.", tool_calls=None)
+
+        with tempfile.TemporaryDirectory(dir=Path.cwd()) as temp_dir:
+            root = Path(temp_dir)
+            model = MultipleCallsModel()
+            result = CodingAgent(model, WorkspaceTools(root), max_steps=2).run("Create files")
+
+            self.assertEqual((root / "one.txt").read_text(encoding="utf-8"), "1")
+            self.assertEqual((root / "two.txt").read_text(encoding="utf-8"), "2")
+
+        self.assertTrue(result.completed)
+        self.assertEqual([item["role"] for item in model.last_messages[-2:]], ["tool", "tool"])
 
 
 if __name__ == "__main__":
