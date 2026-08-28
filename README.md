@@ -72,6 +72,14 @@ python -m unittest discover -s .\demo_workspace -v
 python -m mini_agent "修复计算器的除法功能，使全部测试通过。不要修改测试文件，完成后运行测试验证。" --workspace .\demo_workspace
 ```
 
+更完整的多文件演示使用学生成绩统计模板：
+
+```powershell
+Copy-Item .\demo_gradebook_template .\demo_gradebook_workspace -Recurse
+python -m unittest discover -s .\demo_gradebook_workspace -v
+python -m mini_agent "修复学生成绩统计项目，使全部测试通过。不要修改测试文件，完成后运行测试验证。" --workspace .\demo_gradebook_workspace
+```
+
 ## 核心设计
 
 `CodingAgent.run()` 是整个项目的核心。每一轮它都会：
