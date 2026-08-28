@@ -25,15 +25,21 @@ pip install -r requirements.txt
 
 ## 配置
 
-凭据只通过环境变量提供，不要把真实 Key 写入仓库：
+复制配置模板，然后只在本地 `.env` 中填写 Key。`.env` 已被 Git 忽略，不会上传到仓库：
 
 ```powershell
-$env:AGENT_API_KEY="你的 API Key"
-$env:AGENT_BASE_URL="OpenAI 兼容接口地址"
-$env:AGENT_MODEL="支持 tool calling 的模型名"
+Copy-Item .env.example .env
 ```
 
-使用 OpenAI 官方接口时，`AGENT_BASE_URL` 可以设为 `https://api.openai.com/v1`。
+火山方舟示例配置如下：
+
+```text
+AGENT_API_KEY=你的 API Key
+AGENT_BASE_URL=https://ark.cn-beijing.volces.com/api/v3
+AGENT_MODEL=deepseek-v4-flash-ga-260731
+```
+
+也可以改用系统环境变量；系统环境变量的优先级高于 `.env`。
 
 ## 运行
 
