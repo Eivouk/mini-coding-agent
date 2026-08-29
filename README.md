@@ -1,6 +1,6 @@
 # Mini Coding Agent
 
-一个不使用 Agent 框架、从零实现核心循环的简化编程智能体。
+一个不依赖 Agent 框架、自行实现核心工具循环的简化编程智能体。
 
 ## 它能做什么
 
@@ -16,70 +16,56 @@
 
 ## 安装
 
-建议使用 Python 3.10 或更高版本：
+建议使用 Python 3.10 或更高版本。以下命令适用于 Windows PowerShell：
 
 ```powershell
 python -m venv .venv
-.venv\Scripts\Activate.ps1
-pip install -r requirements.txt
+.\.venv\Scripts\python.exe -m pip install -r requirements.txt
 ```
 
 ## 配置
 
-复制配置模板，然后只在本地 `.env` 中填写 Key。`.env` 已被 Git 忽略，不会上传到仓库：
+复制配置模板，在本地 `.env` 中填写模型服务配置。`.env` 已加入 `.gitignore`，默认不会被 Git 跟踪；请勿强制提交：
 
 ```powershell
 Copy-Item .env.example .env
 ```
 
-火山方舟示例配置如下：
+配置项如下：
 
 ```text
 AGENT_API_KEY=你的 API Key
-AGENT_BASE_URL=https://ark.cn-beijing.volces.com/api/v3
-AGENT_MODEL=deepseek-v4-flash-ga-260731
+AGENT_BASE_URL=兼容接口地址
+AGENT_MODEL=支持工具调用的模型名称
+AGENT_MAX_STEPS=20
 ```
 
-也可以改用系统环境变量；系统环境变量的优先级高于 `.env`。
-
-## 运行
-
-建议准备一个单独的演示目录，让 Agent 只在该目录工作：
-
-```powershell
-python -m mini_agent "创建一个 Python 计算器并为它编写单元测试，然后运行测试" --workspace .\demo
-```
+模型服务需兼容 Chat Completions 工具调用格式。也可以使用系统环境变量，其优先级高于 `.env`。
 
 ## 测试
 
 自动测试不需要 API Key，也不会产生模型调用费用：
 
 ```powershell
-python -m unittest discover -s tests -v
+.\.venv\Scripts\python.exe -m unittest discover -s tests -v
 ```
 
-## 准备演示任务
+## 端到端示例
 
-仓库提供了一个故意带错误的计算器模板。先复制它，避免演示过程修改模板：
-
-```powershell
-Copy-Item .\demo_template .\demo_workspace -Recurse
-python -m unittest discover -s .\demo_workspace -v
-```
-
-初始测试会失败。然后让 Agent 完成真实修复：
-
-```powershell
-python -m mini_agent "修复计算器的除法功能，使全部测试通过。不要修改测试文件，完成后运行测试验证。" --workspace .\demo_workspace
-```
-
-更完整的多文件演示使用学生成绩统计模板：
+仓库提供一个包含已知缺陷的多文件成绩统计样例，用于复现“读取项目、分析测试、精确修改源码、运行验证”的完整过程。复制样例可以避免修改原始模板：
 
 ```powershell
 Copy-Item .\demo_gradebook_template .\demo_gradebook_workspace -Recurse
-python -m unittest discover -s .\demo_gradebook_workspace -v
-python -m mini_agent "修复学生成绩统计项目，使全部测试通过。不要修改测试文件，完成后运行测试验证。" --workspace .\demo_gradebook_workspace
+.\.venv\Scripts\python.exe -m unittest discover -s .\demo_gradebook_workspace -v
 ```
+
+该样例故意保留已知缺陷，因此初始三项测试中有两项失败；这不是 Agent 项目自身测试失败。运行 Agent 修复副本：
+
+```powershell
+.\.venv\Scripts\python.exe -m mini_agent "修复学生成绩统计项目，使全部测试通过。不要修改测试文件，完成后运行测试验证。" --workspace .\demo_gradebook_workspace
+```
+
+正常情况下，Agent 会读取源码与测试、精确编辑两个源码文件并主动运行测试，最终三项测试全部通过。仓库中的计算器模板仅作为更小的辅助样例保留。
 
 ## 核心设计
 
@@ -91,6 +77,6 @@ python -m mini_agent "修复学生成绩统计项目，使全部测试通过。�
 4. 如果模型不再调用工具，就把文本作为最终结果。
 5. 达到最大轮数时强制停止，避免无限循环。
 
-文件工具拒绝绝对路径和工作区外路径；`edit_file` 只在旧文本恰好出现一次时修改。命令有超时和输出长度限制，并用退出码提供结构化成功或失败状态，同时拦截部分明显危险的命令。
+文件工具拒绝绝对路径和工作区外路径；`edit_file` 只在旧文本恰好出现一次时修改。命令有超时和输出长度限制，并用退出码提供结构化状态，同时拦截部分明显危险的命令。
 
 本项目是教学用途的轻量 Agent，不是操作系统沙箱。`run_command` 的当前目录被设为工作区，但进程级隔离仍应由容器或虚拟机提供。因此请只把独立、可恢复的目录交给 Agent。
